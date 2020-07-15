@@ -41,6 +41,10 @@ class StockBuffer(models.Model):
                     lambda rule: rule.action in ("pull", "pull_push")
                 ).mapped("location_src_id")
             )
+            or any(
+                rule.action in ("buy", "manufacture") and not rule.location_src_id
+                for rule in route.rule_ids
+            )
         )
 
     def get_parents(self):
