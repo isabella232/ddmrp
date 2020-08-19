@@ -765,6 +765,22 @@ class TestDdmrp(TestDdmrpCommon):
         self.assertIn(pol.buffer_ids, self.buffer_purchase)
         self.assertEqual(self.buffer_purchase.procure_recommended_qty, 0)
 
+    def test_25_auto_procure(self):
+        pol = self.pol_model.search([("product_id", "=", self.product_purchased.id)])
+        self.assertFalse(pol)
+        self.assertGreater(self.buffer_purchase.procure_recommended_qty, 0)
+        self.buffer_purchase.auto_procure = True
+        self.buffer_purchase.auto_procure_option = "stockout"
+        self.buffer_purchase.cron_actions()
+        pol = self.pol_model.search([("product_id", "=", self.product_purchased.id)])
+        self.assertFalse(pol)  # Buffer is not in stockout.
+        # Change to standard, it should procure now.
+        self.buffer_purchase.auto_procure_option = "standard"
+        self.buffer_purchase.cron_actions()
+        pol = self.pol_model.search([("product_id", "=", self.product_purchased.id)])
+        self.assertEqual(len(pol), 1)
+        self.assertEqual(self.buffer_purchase.procure_recommended_qty, 0)
+
     # TEST SECTION 3: DLT, BoM's and misc
 
     def test_30_bom_buffer_fields(self):
