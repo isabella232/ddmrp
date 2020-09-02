@@ -702,11 +702,19 @@ class StockBuffer(models.Model):
             elif rec.buffer_profile_id.item_type == "distributed":
                 rec.dlt = rec.lead_days
             else:
-                rec.dlt = (
-                    rec.product_id.seller_ids
-                    and rec.product_id.seller_ids[0].delay
-                    or rec.lead_days
+                sellers = rec.product_id.seller_ids
+                sellers_variant = sellers.filtered(
+                    lambda s: s.product_id == rec.product_id
                 )
+                sellers_no_variant = sellers.filtered(lambda s: not s.product_id)
+                if sellers_variant:
+                    rec.dlt = sellers_variant[0].delay
+                elif sellers_no_variant:
+                    rec.dlt = sellers_no_variant[0].delay
+                elif sellers:
+                    rec.dlt = sellers[0].delay
+                else:
+                    rec.dlt = rec.lead_days
 
     @api.depends("buffer_profile_id", "product_id.seller_ids")
     def _compute_main_supplier(self):
