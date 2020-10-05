@@ -1289,8 +1289,11 @@ class StockBuffer(models.Model):
         if self.item_type == "purchased":
             pols = self.purchase_line_ids.filtered(
                 lambda l: l.date_planned > fields.Datetime.to_datetime(cut_date)
+                and l.order_id.state in ("draft", "sent")
             )
-            pos = pols.mapped("order_id")
+            out_domain = self._search_stock_moves_incoming_domain(outside_dlt=True)
+            moves = self.env["stock.move"].search(out_domain)
+            pos = pols.mapped("order_id") + moves.mapped("purchase_line_id.order_id")
             action = self.env.ref("purchase.purchase_rfq")
             result = action.read()[0]
             # Remove the context since the action display RFQ and not PO.
