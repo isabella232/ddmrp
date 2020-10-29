@@ -3,7 +3,7 @@
 
 from odoo import models
 
-from odoo.addons.queue_job.job import identity_exact, job_auto_delay
+from odoo.addons.queue_job.job import identity_exact, job
 
 
 class Buffer(models.Model):
@@ -16,6 +16,6 @@ class Buffer(models.Model):
             "description": "DDMRP Buffer calculation ({})".format(self.display_name),
         }
 
-    @job_auto_delay(default_channel="root.ddmrp")
-    def cron_actions(self, only_nfp=False):
-        return super().cron_actions(only_nfp=only_nfp)
+    @job(default_channel="root.ddmrp")
+    def job_cron_actions(self, only_nfp=False):
+        return self.cron_actions(only_nfp=only_nfp)
