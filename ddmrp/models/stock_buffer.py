@@ -276,6 +276,20 @@ class StockBuffer(models.Model):
         compute="_compute_product_available_qty",
     )
 
+    def _get_outgoing_reservation_qty(self):
+        """Return the qty reserved in operations that move products outside
+        of the buffer in the UoM of the product."""
+        domain = [
+            ("product_id", "=", self.product_id.id),
+            ("state", "not in", ("cancel", "done")),
+        ]
+        lines = self.env["stock.move.line"].search(domain)
+        lines = lines.filtered(
+            lambda line: line.location_id.is_sublocation_of(self.location_id)
+            and not line.location_dest_id.is_sublocation_of(self.location_id)
+        )
+        return sum(lines.mapped("product_qty"))
+
     def _compute_product_available_qty(self):
         operation_by_location = defaultdict(lambda: self.env["stock.buffer"])
         for rec in self:
@@ -290,23 +304,19 @@ class StockBuffer(models.Model):
                     package_id=self.env.context.get("package_id"),
                 )
             )
-            products_not_res = (
-                buffer_in_location.mapped("product_id")
-                .with_context(location=location_id.id)
-                ._compute_product_available_not_res_dict()
-            )
             for buffer in buffer_in_location:
                 product = products[buffer.product_id.id]
-                product_not_res = products_not_res[buffer.product_id.id]
+                reserved_qty = buffer._get_outgoing_reservation_qty()
                 buffer.update(
                     {
                         "product_location_qty": product["qty_available"],
                         "incoming_location_qty": product["incoming_qty"],
                         "outgoing_location_qty": product["outgoing_qty"],
                         "virtual_location_qty": product["virtual_available"],
-                        "product_location_qty_available_not_res": product_not_res[
-                            "qty_available_not_res"
-                        ],
+                        "product_location_qty_available_not_res": product[
+                            "qty_available"
+                        ]
+                        - reserved_qty,
                     }
                 )
 
