@@ -281,7 +281,7 @@ class StockBuffer(models.Model):
         of the buffer in the UoM of the product."""
         domain = [
             ("product_id", "=", self.product_id.id),
-            ("state", "not in", ("cancel", "done")),
+            ("state", "in", ("partially_available", "assigned")),
         ]
         lines = self.env["stock.move.line"].search(domain)
         lines = lines.filtered(
