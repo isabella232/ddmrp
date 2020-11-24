@@ -864,6 +864,11 @@ class TestDdmrp(TestDdmrpCommon):
         # Fall back to no-variant supplier info
         self.assertEqual(self.buffer_c_orange.dlt, 8)
 
+    def test_36_dlt_extra_lead_time(self):
+        # Add extra lead time
+        self.buffer_c_blue.extra_lead_time = 20
+        self.assertEqual(self.buffer_c_blue.dlt, 25)
+
     def test_40_bokeh_charts(self):
         """Check bokeh chart computation."""
         date_move = datetime.today()
@@ -873,3 +878,28 @@ class TestDdmrp(TestDdmrpCommon):
         self.assertTrue(self.buffer_a.ddmrp_chart)
         self.assertTrue(self.buffer_a.ddmrp_demand_chart)
         self.assertTrue(self.buffer_a.ddmrp_supply_chart)
+
+    def test_41_archive_template(self):
+        # archive a product template:
+        self.template_c.toggle_active()
+        self.assertFalse(self.template_c.active)
+        self.assertFalse(self.product_c_blue.active)
+        self.assertFalse(self.product_c_orange.active)
+        self.assertFalse(self.buffer_c_blue.active)
+        self.assertFalse(self.buffer_c_orange.active)
+
+    def test_42_archive_variant(self):
+        # archive a variant
+        self.product_c_blue.toggle_active()
+        self.assertTrue(self.template_c.active)
+        self.assertFalse(self.product_c_blue.active)
+        self.assertTrue(self.product_c_orange.active)
+        self.assertFalse(self.buffer_c_blue.active)
+        self.assertTrue(self.buffer_c_orange.active)
+        # toggle a buffer before toggling product:
+        self.buffer_c_blue.toggle_active()
+        self.assertTrue(self.buffer_c_blue.active)
+        self.assertFalse(self.product_c_blue.active)
+        self.product_c_blue.toggle_active()
+        self.assertTrue(self.buffer_c_blue.active)
+        self.assertTrue(self.product_c_blue.active)
