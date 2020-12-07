@@ -978,10 +978,14 @@ class StockBuffer(models.Model):
 
     def _past_moves_domain(self, date_from, date_to, locations):
         self.ensure_one()
+        # Exclude inventory loss moves
+        inventory_locations = self.env["stock.location"].search(
+            [("usage", "=", "inventory")]
+        )
         return [
             ("state", "=", "done"),
             ("location_id", "in", locations.ids),
-            ("location_dest_id", "not in", locations.ids),
+            ("location_dest_id", "not in", (locations | inventory_locations).ids),
             ("product_id", "=", self.product_id.id),
             ("date", ">=", date_from),
             ("date", "<=", date_to),
@@ -999,7 +1003,9 @@ class StockBuffer(models.Model):
             self.warehouse_id.wh_plan_days(datetime.now(), -1)
         )
         locations = self.env["stock.location"].search(
-            [("id", "child_of", [self.location_id.id])]
+            [
+                ("id", "child_of", [self.location_id.id]),
+            ]
         )
         if self.adu_calculation_method.source_past == "estimates":
             qty = 0.0
@@ -1031,10 +1037,14 @@ class StockBuffer(models.Model):
 
     def _future_moves_domain(self, date_from, date_to, locations):
         self.ensure_one()
+        # Exclude inventory loss moves
+        inventory_locations = self.env["stock.location"].search(
+            [("usage", "=", "inventory")]
+        )
         return [
             ("state", "not in", ["done", "cancel"]),
             ("location_id", "in", locations.ids),
-            ("location_dest_id", "not in", locations.ids),
+            ("location_dest_id", "not in", (locations | inventory_locations).ids),
             ("product_id", "=", self.product_id.id),
             ("date_expected", ">=", date_from),
             ("date_expected", "<=", date_to),
