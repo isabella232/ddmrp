@@ -62,3 +62,11 @@ class StockBufferProfile(models.Model):
         help="When activated, the recommended quantity will be maxed at "
         "the quantity available in the replenishment source location.",
     )
+    distributed_reschedule_max_proc_time = fields.Float(
+        string="Re-Schedule Procurement Max Proc. Time (minutes)",
+        default=0.0,
+        help="When you request procurement from a buffer, their scheduled"
+        " date is rescheduled to now + this procurement time (in minutes)."
+        " Their scheduled date represents the latest the transfers should"
+        " be done, and therefore, past this timestamp, considered late.",
+    )
