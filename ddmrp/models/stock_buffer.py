@@ -226,17 +226,28 @@ class StockBuffer(models.Model):
 
     def _get_date_planned(self):
         self.ensure_one()
+        profile = self.buffer_profile_id
         dlt = int(self.dlt)
         # For purchased items we always consider calendar days,
         # not work days.
-        if (
-            self.warehouse_id.calendar_id
-            and self.buffer_profile_id.item_type != "purchased"
-        ):
-            dt_planned = self.warehouse_id.wh_plan_days(datetime.now(), dlt)
+        if profile.item_type == "purchased":
+            dt_planned = fields.datetime.today() + timedelta(days=dlt)
         else:
-            dt_planned = fields.date.today() + timedelta(days=dlt)
-        return fields.Date.to_date(dt_planned)
+            if self.warehouse_id.calendar_id:
+                delta_days = dlt + (profile.distributed_reschedule_max_proc_time / 3600)
+                # NOTE: wh_plan_days rounds the delta, so usually
+                # distributed_reschedule_max_proc_time will be squashed, this
+                # may or not be the desired behavior...
+                dt_planned = self.warehouse_id.wh_plan_days(
+                    fields.datetime.now(), delta_days
+                )
+            else:
+                dt_planned = (
+                    fields.datetime.now()
+                    + timedelta(days=dlt)
+                    + timedelta(minutes=profile.distributed_reschedule_max_proc_time)
+                )
+        return dt_planned
 
     procure_recommended_qty = fields.Float(
         string="Procure Recommendation",
