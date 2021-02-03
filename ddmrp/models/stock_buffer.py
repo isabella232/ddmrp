@@ -3,6 +3,7 @@
 
 import logging
 import operator as py_operator
+import threading
 from collections import defaultdict
 from datetime import datetime, timedelta
 from math import pi
@@ -10,6 +11,7 @@ from math import pi
 from odoo import _, api, exceptions, fields, models
 from odoo.exceptions import ValidationError
 from odoo.tools import float_compare, float_round
+from odoo.tools.misc import split_every
 
 _logger = logging.getLogger(__name__)
 try:
@@ -46,6 +48,8 @@ class StockBuffer(models.Model):
     _name = "stock.buffer"
     _description = "Stock Buffer"
     _order = "planning_priority_level asc, net_flow_position asc"
+
+    CRON_DDMRP_CHUNKS = 50
 
     @api.model
     def default_get(self, fields):
@@ -358,7 +362,7 @@ class StockBuffer(models.Model):
     )
     def _compute_red_zone(self):
         for rec in self:
-            if rec.replenish_method in ["replenish", "min_max"]:
+            if rec.product_id and rec.replenish_method in ["replenish", "min_max"]:
                 rec.red_base_qty = float_round(
                     rec.dlt * rec.adu * rec.buffer_profile_id.lead_time_id.factor,
                     precision_rounding=rec.product_uom.rounding,
@@ -368,8 +372,10 @@ class StockBuffer(models.Model):
                     precision_rounding=rec.product_uom.rounding,
                 )
                 rec.red_zone_qty = rec.red_base_qty + rec.red_safety_qty
-            else:
+            elif rec.product_id and rec.replenish_method == "replenish_override":
                 rec.red_zone_qty = rec.red_override
+            else:
+                rec.red_zone_qty = 0.0
 
     @api.depends(
         "dlt",
@@ -383,7 +389,7 @@ class StockBuffer(models.Model):
     )
     def _compute_green_zone(self):
         for rec in self:
-            if rec.replenish_method in ["replenish", "min_max"]:
+            if rec.product_id and rec.replenish_method in ["replenish", "min_max"]:
                 # Using imposed or desired minimum order cycle
                 rec.green_zone_oc = float_round(
                     rec.order_cycle * rec.adu,
@@ -405,8 +411,10 @@ class StockBuffer(models.Model):
                 rec.green_zone_qty = max(
                     rec.green_zone_oc, rec.green_zone_lt_factor, rec.green_zone_moq
                 )
-            else:
+            elif rec.product_id and rec.replenish_method == "replenish_override":
                 rec.green_zone_qty = rec.green_override
+            else:
+                rec.green_zone_qty = 0.0
             rec.top_of_green = rec.green_zone_qty + rec.top_of_yellow
 
     @api.depends(
@@ -423,14 +431,16 @@ class StockBuffer(models.Model):
     )
     def _compute_yellow_zone(self):
         for rec in self:
-            if rec.replenish_method == "min_max":
+            if rec.product_id and rec.replenish_method == "min_max":
                 rec.yellow_zone_qty = 0
-            elif rec.replenish_method == "replenish":
+            elif rec.product_id and rec.replenish_method == "replenish":
                 rec.yellow_zone_qty = float_round(
                     rec.dlt * rec.adu, precision_rounding=rec.product_uom.rounding
                 )
-            else:
+            elif rec.product_id and rec.replenish_method == "replenish_override":
                 rec.yellow_zone_qty = rec.yellow_override
+            else:
+                rec.yellow_zone_qty = 0.0
             rec.top_of_yellow = rec.yellow_zone_qty + rec.red_zone_qty
 
     @api.depends(
@@ -1461,23 +1471,27 @@ class StockBuffer(models.Model):
     @api.model
     def cron_ddmrp_adu(self, automatic=False):
         """calculate ADU for each DDMRP buffer. Called by cronjob."""
+        auto_commit = not getattr(threading.currentThread(), "testing", False)
         _logger.info("Start cron_ddmrp_adu.")
-        buffers = self.search([])
+        buffer_ids = self.search([]).ids
         i = 0
-        j = len(buffers)
-        for b in buffers:
-            try:
-                i += 1
-                _logger.debug("ddmrp cron_adu: {}. ({}/{})".format(b.name, i, j))
-                if automatic:
-                    with self.env.cr.savepoint():
+        j = len(buffer_ids)
+        for buffer_chunk_ids in split_every(self.CRON_DDMRP_CHUNKS, buffer_ids):
+            for b in self.browse(buffer_chunk_ids).exists():
+                try:
+                    i += 1
+                    _logger.debug("ddmrp cron_adu: {}. ({}/{})".format(b.name, i, j))
+                    if automatic:
+                        with self.env.cr.savepoint():
+                            b._calc_adu()
+                    else:
                         b._calc_adu()
-                else:
-                    b._calc_adu()
-            except Exception:
-                _logger.exception("Fail to compute ADU for buffer %s", b.name)
-                if not automatic:
-                    raise
+                except Exception:
+                    _logger.exception("Fail to compute ADU for buffer %s", b.name)
+                    if not automatic:
+                        raise
+            if auto_commit:
+                self._cr.commit()
         _logger.info("End cron_ddmrp_adu.")
         return True
 
@@ -1485,6 +1499,18 @@ class StockBuffer(models.Model):
         """This method is meant to be inherited by other modules in order to
         enhance extensibility."""
         self.ensure_one()
+        self.invalidate_cache(
+            fnames=[
+                "product_location_qty",
+                "incoming_location_qty",
+                "outgoing_location_qty",
+                "virtual_location_qty",
+                "product_location_qty_available_not_res",
+                "dlt",
+                "distributed_source_location_qty",
+            ],
+            ids=self.ids,
+        )
         if not only_nfp or only_nfp == "out":
             self._calc_qualified_demand()
         if not only_nfp or only_nfp == "in":
@@ -1505,24 +1531,27 @@ class StockBuffer(models.Model):
     def cron_ddmrp(self, automatic=False):
         """Calculate key DDMRP parameters for each buffer.
         Called by cronjob."""
+        auto_commit = not getattr(threading.currentThread(), "testing", False)
         _logger.info("Start cron_ddmrp.")
-        buffers = self.search([])
+        buffer_ids = self.search([]).ids
         i = 0
-        j = len(buffers)
-        buffers.refresh()
-        for b in buffers:
-            i += 1
-            _logger.debug("ddmrp cron: {}. ({}/{})".format(b.name, i, j))
-            try:
-                if automatic:
-                    with self.env.cr.savepoint():
+        j = len(buffer_ids)
+        for buffer_chunk_ids in split_every(self.CRON_DDMRP_CHUNKS, buffer_ids):
+            for b in self.browse(buffer_chunk_ids).exists():
+                i += 1
+                _logger.debug("ddmrp cron: {}. ({}/{})".format(b.name, i, j))
+                try:
+                    if automatic:
+                        with self.env.cr.savepoint():
+                            b.cron_actions()
+                    else:
                         b.cron_actions()
-                else:
-                    b.cron_actions()
-            except Exception:
-                _logger.exception("Fail updating buffer %s", b.name)
-                if not automatic:
-                    raise
+                except Exception:
+                    _logger.exception("Fail updating buffer %s", b.name)
+                    if not automatic:
+                        raise
+            if auto_commit:
+                self._cr.commit()
         _logger.info("End cron_ddmrp.")
         return True
 
