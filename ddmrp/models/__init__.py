@@ -15,4 +15,3 @@ from . import stock_move
 from . import stock_picking
 from . import res_company
 from . import product_product
-from . import stock_location
