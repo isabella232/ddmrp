@@ -3,7 +3,7 @@ odoo.define("ddmrp.list_renderer_buffer_info", function(require) {
 
     var ListRenderer = require("web.ListRenderer");
     var concurrency = require("web.concurrency");
-    var pyUtils = require('web.py_utils');
+    var pyUtils = require("web.py_utils");
 
     ListRenderer.include({
         /**
@@ -22,8 +22,8 @@ odoo.define("ddmrp.list_renderer_buffer_info", function(require) {
             this._super.apply(this, arguments);
         },
         _renderBodyCell: function(record, node, colIndex, options) {
-            var $td = this._super.apply(this, arguments);
-            node_options = node.attrs.options;
+            var $td = this._super.apply(this, arguments),
+                node_options = node.attrs.options;
             if (!_.isObject(options)) {
                 node_options = node_options ? pyUtils.py_eval(node_options) : {};
             }
