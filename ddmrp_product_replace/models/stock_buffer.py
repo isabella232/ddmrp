@@ -84,11 +84,14 @@ class StockBuffer(models.Model):
                 "purchased",
             ]
 
+    @api.depends("item_type")
     def _compute_procure_recommended_qty(self):
-        res = super()._compute_procure_recommended_qty()
-        for rec in self:
-            if rec.replaced_by_id and rec.item_type in ["manufactured", "purchased"]:
-                rec.procure_recommended_qty = 0.0
+        replaced = self.filtered(
+            lambda r: r.replaced_by_id and r.item_type in ["manufactured", "purchased"]
+        )
+        res = super(StockBuffer, self - replaced)._compute_procure_recommended_qty()
+        for rec in replaced:
+            rec.procure_recommended_qty = 0.0
         return res
 
     def _past_moves_domain(self, date_from, date_to, locations):
