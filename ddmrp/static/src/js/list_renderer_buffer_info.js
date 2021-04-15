@@ -21,6 +21,7 @@ odoo.define("ddmrp.list_renderer_buffer_info", function(require) {
             }
             this._super.apply(this, arguments);
         },
+        // eslint-disable-next-line no-unused-vars
         _renderBodyCell: function(record, node, colIndex, options) {
             var $td = this._super.apply(this, arguments),
                 node_options = node.attrs.options;
