@@ -153,16 +153,9 @@ class StockBuffer(models.Model):
         domain = super()._search_stock_moves_qualified_demand_domain()
         if not self.demand_product_ids:
             return domain
-        index_replace = False
-        for n, clause in enumerate(domain):
-            if isinstance(clause, tuple) and clause[0] == "product_id":
-                index_replace = n
-        if isinstance(index_replace, int):
-            domain[index_replace] = (
-                "product_id",
-                "in",
-                self.demand_product_ids.ids,
-            )
+        domain = [x for x in domain if x[0] != "product_id"] + [
+            ("product_id", "in", self.demand_product_ids.ids)
+        ]
         return domain
 
     def action_view_buffers_replaced(self):
