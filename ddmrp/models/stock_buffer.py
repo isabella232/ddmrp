@@ -819,7 +819,7 @@ class StockBuffer(models.Model):
             if not rec.main_supplier_id:
                 rec.product_vendor_code = False
                 continue
-            supplier_info = rec.product_id.seller_ids.filtered(
+            supplier_info = rec._get_product_sellers().filtered(
                 lambda r: r.name == rec.main_supplier_id
                 and r.product_id == rec.product_id
             )
