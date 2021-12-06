@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <record id="archived_buffer_action" model="ir.actions.act_window">
+        <field name="name">Archived Purchase Buffers</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">stock.buffer</field>
+        <field name="view_mode">tree,form</field>
+        <field
+            name="domain"
+        >[('active', '=', False), ('product_id', '=', context.get('product_id'))]</field>
+    </record>
+    <record id="product_normal_form_view" model="ir.ui.view">
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_normal_form_view" />
+        <field name="arch" type="xml">
+            <xpath expr="/form/sheet" position="before">
+                <div
+                    class="alert alert-warning"
+                    role="alert"
+                    attrs="{'invisible': [('archived_buffer_warning_qty', '=', 0)]}"
+                >
+          This product has <field
+                        name="archived_buffer_warning_qty"
+                    /> archived purchase buffers.
+          <button
+                        type="action"
+                        name="%(archived_buffer_action)d"
+                        string="Check them..."
+                        context="{'product_id': id}"
+                        class="oe-link"
+                    />
+        </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>
