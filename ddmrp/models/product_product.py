@@ -1,7 +1,7 @@
 # Copyright 2020 ForgeFlow S.L. (http://www.forgeflow.com)
 # License LGPL-3.0 or later (https://www.gnu.org/licenses/lgpl.html).
 
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class Product(models.Model):
@@ -12,6 +12,25 @@ class Product(models.Model):
         string="Stock Buffers",
         inverse_name="product_id",
     )
+
+    archived_buffer_warning_qty = fields.Integer(
+        compute="_compute_archived_buffer_warning_qty"
+    )
+
+    @api.depends("buffer_ids", "buffer_ids.active")
+    def _compute_archived_buffer_warning_qty(self):
+        for product in self:
+            product.archived_buffer_warning_qty = (
+                self.env["stock.buffer"]
+                .sudo()
+                .search_count(
+                    [
+                        ("product_id", "=", product.id),
+                        ("item_type", "=", "purchased"),
+                        ("active", "=", False),
+                    ]
+                )
+            )
 
     def write(self, values):
         res = super().write(values)
